@@ -127,7 +127,7 @@ func (c *ChromaClient) Check() error {
 		printStruct(database)
 	}
 
-	testCollection, err := c.GetCollection("test")
+	testCollection, err := c.GetCollection("test_collection")
 	if err != nil {
 		return err
 	}
@@ -147,6 +147,7 @@ func (c *ChromaClient) Check() error {
 			ID:        "baz",
 		},
 	})
+
 	if err != nil {
 		return err
 	}
@@ -156,6 +157,7 @@ func (c *ChromaClient) Check() error {
 			{1.0, 1.0, 0.999},
 		},
 	})
+
 	if err != nil {
 		return err
 	}
@@ -165,6 +167,11 @@ func (c *ChromaClient) Check() error {
 	if DEBUG {
 		fmt.Println("RESULTS:")
 		printStruct(results)
+	}
+
+	err = c.RemoveCollection("test_collection")
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -307,6 +314,36 @@ func (c *ChromaClient) GetDatabase() (*ChromaDatabase, error) {
 	return &database, nil
 }
 
+// Removes collection
+func (c *ChromaClient) RemoveCollection(name string) error {
+	url := *c.baseURL
+
+	url.Path = path.Join(url.Path, "collections", name)
+	query := url.Query()
+	query.Set("tenant", c.tenant)
+	query.Set("database", c.database)
+	url.RawQuery = query.Encode()
+
+	fmt.Println("RemoveCollection:", url.String())
+
+	req, err := http.NewRequest("DELETE", url.String(), nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("RemoveCollection: wrong HTTP status:" + strconv.Itoa(resp.StatusCode))
+	}
+
+	return nil
+}
+
 // Gets collection, creating it if not found
 func (c *ChromaClient) GetCollection(name string) (*ChromaCollection, error) {
 	url := *c.baseURL
@@ -360,16 +397,19 @@ func (c *ChromaClient) GetCollection(name string) (*ChromaCollection, error) {
 
 			if resp.StatusCode != http.StatusOK {
 				// fmt.Printf("STATUS: %d\n", resp.StatusCode)
-				// body, _ := ioutil.ReadAll(resp.Body)
-				// fmt.Println("BODY:", string(body))
 				return nil, errors.New("failed to create database")
 			}
 
-			collection.Tenant = c.tenant
-			collection.Database = c.database
-			collection.client = c
+			decoder := json.NewDecoder(resp.Body)
+			var createdCollection ChromaCollection
+			err = decoder.Decode(&createdCollection)
+			if err != nil {
+				return nil, err
+			}
 
-			return &collection, nil
+			createdCollection.client = c
+
+			return &createdCollection, nil
 		}
 
 		return nil, errors.New("non-supported HTTP status:" + strconv.Itoa(resp.StatusCode))
