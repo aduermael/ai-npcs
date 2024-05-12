@@ -154,14 +154,3 @@ func onResponse(r ollama.GenerateResponse) error {
 	}
 	return nil
 }
-
-func onEmbeddingResponse(r ollama.GenerateResponse) error {
-	fmt.Println(r.Response)
-	c <- 0
-	return nil
-}
-
-func checkChromaDB() error {
-	fmt.Println("CHECKING CHROMA DB")
-	return nil
-}
